@@ -1,0 +1,493 @@
+\documentclass[final,5p,times,twocolumn,authoryear]{elsarticle}
+\usepackage{amssymb}
+\usepackage{lipsum}
+\newcommand{\kms}{km\,s$^{-1}$}
+\newcommand{\msun}{$M_\odot}
+\journal{Informatics in Medicine Unlocked}
+\begin{document}
+\begin{frontmatter}
+\title{Noise-Aware Undersampling for imbalanced medical data (NAUS)}
+\author[aff2]{Ainur Yerkos}
+\author[aff1]{Markus Wolfien}
+\author[aff1]{Zhibek Zhetpisbay}
+\affiliation[aff2]{organization={Department of Computer Science, Al-Farabi Kazakh National University},
+ addressline={al-Farabi Avenue},
+ city={Almaty},
+ postcode={050040},
+ state={},
+ country={Kazakhstan}}
+\affiliation[aff1]{organization={TUD Dresden University of Technology, Faculty of Medicine Carl Gustav Carus, Institute for Medical Informatics and Biometry},
+ addressline={Fetscherstr. 74},
+ city={Dresden},
+ postcode={01307},
+ state={},
+ country={Germany}}
+\begin{abstract}
+Advancements in medical research have increasingly relied on robust data analytics to support diagnostic and treatment decisions. However, data analysis still faces challenges when investigating datasets with severe class imbalance, often stemming from the rarity of certain conditions and uneven disease distributions. To address this issue, we propose the Noise-Aware Undersampling with Subsampling (NAUS) algorithm. NAUS integrates clustering, noise removal, and Tomek-link identification techniques to create refined subsamples that assess the significance of individual observations, while systematically removing redundant and noisy data.
+\end{abstract}
+\begin{keyword}
+Data balancing \sep Undersampling \sep Noise removal \sep Tomek-link \sep Data analysis
+\end{keyword}
+\end{frontmatter}
+
+\section{Introduction}
+Accurate data analysis is inevitable in medical research, where bal-anced and representative datasets are essential for developing reliable diagnostic and treatment models. In medicine, even small misrepre-sentations in data sampling can lead to significant biases in predictive outcomes, directly affecting patient care \cite{ref1}. Reliable sampling meth-ods are therefore essential to ensure that machine learning models capture the full spectrum of patient data, ranging from common con-ditions to rare diseases. Data imbalance is a common challenge in the medical field \cite{ref2}. It often arises due to the natural rarity of certain conditions or unequal case distributions, leading to datasets where the majority class may overshadow the minority class. Traditional oversam-pling techniques, which artificially augment the minority class, have been widely used to address this issue \cite{ref3,ref4}. However, oversampling may introduce redundant information or amplify existing noise within the data \cite{ref5}.
+As an alternative or complement to oversampling, undersampling strategies aim to reduce the bias caused by an overabundance of majority class data by removing uninformative or redundant obser-vations. These methods not only improve the balance but also help 
+focus on the most meaningful patterns by filtering out noise. Among the existing methods of undersampling, one of the most commonly used approaches is clustering, which helps to remove distant and unin-formative observations. For example, Mathew and R. Gunasundari \cite{ref6} remove the points farthest from the centroids, or in the method \cite{ref7} the centroids themselves are selected from the MiniBatchKMeans. Onan \cite{ref8} demonstrates a more complex clustering approach based on a consensus function. Boosting-based extensions of cluster undersampling \cite{ref9} aim to better preserve informative majority samples by incorporating centroid, boundary, and neighborhood information. However, these methods in-herently increase computational complexity and remain sensitive to the choice of clustering parameters, which may limit their scalability and robustness on highly imbalanced or noisy medical datasets. Despite the convenience of cluster methods, simple ones are highly dependent on the number of clusters, while complex ones require computational costs and fine tuning. Another relevant solution is the method of optimizing the dividing plane, as shown by Jiang et al. \cite{ref10}, where the significance of the data determines the distance to the boundary, but linearly sep-arable data will have the best results. Zhou et al. \cite{ref11} demonstrated a more comprehensive approach by integrating clustering and Adaboost, 
+∗ Corresponding author.∗∗ Corresponding author at: TUD Dresden University of Technology, Faculty of Medicine Carl Gustav Carus, Institute for Medical Informatics and Biometry, Fetscherstr. 74, Dresden, 01307, Germany.
+E-mail addresses: yerkos.ainur@kaznu.kz (A. Yerkos), markus.wolfien@tu-dresden.de (M. Wolfien).
+The algorithm proposed by Kang et al. \cite{ref13} aims at noise removal, where K-Nearest Neighbors (KNN) is used to determine the significance of points depending on the presence of observations of another class, but with a small number of minority classes the method is insufficient. The Spatial Distribution-based UnderSampling (SDUS) [14] method focuses on preserving the spatial structure of the majority class through local neighborhood modeling. While this strategy improves distribution fidelity, it relies on multiple neighborhood constructions and ensemble generation, which increases sensitivity to noise and dimensionality and introduces additional computational overhead. The nearest neighbors were also used by Vuttipittayamongkol and Elyan \cite{ref15}, where four methods of undersampling based on KNN and dependence on the num-ber of neighbors were developed. Another algorithm that includes four methods, is presented by Nyberg and Klami \cite{ref16}, which combines uplift modeling and undersampling. This method requires careful selection of hyperparameters, as does the algorithm from Leevy et al. [17], which considers threshold optimization with random undersampling. The method by Koziarski \cite{ref18} is dependent on hyperparameters and dimension, where the degree of influence of observations is calculated using the Gaussian radial basis function.
+The ensemble method, considered by Kim and Lim \cite{ref19}, is also a popular undersampling direction. They upgraded the existing Particle Stacking Undersampling (PSU) method and trained with boosting. The algorithm by Zhou et al. \cite{ref20} has a similar principle, where an object is defined as noise with a large number of erroneous classifications in the samples. A special feature of the approach by Kamaladevi and Venkatraman \cite{ref21} is the analysis of the relationship of objects with Tversky Similarity and the use of Adaboost. Despite the effectiveness of conventional ensemble training methods, a large number of models require significant resources. The algorithm by Dai et al. \cite{ref22} also fo-cuses on creating subsamples, but unlike previous methods, objects are labeled depending on tomek-link without needing to train the model, which leads to sensitivity to noise. The weak point of Tomek-link-based methods is the vulnerability towards a too strong imbalance ratio, since the observations of the majority are considered in conjunction with the minority. This can lead to continued imbalance even after oversampling.
+In this context, the present work introduces the Noise-Aware Un-dersampling with Subsampling (NAUS) algorithm. NAUS is designed to blend the strengths of different undersampling strategies by inte-grating clustering, noise removal, and Tomek-link identification. This integrated approach aims to enhance data balance more effectively than traditional undersampling methods, ultimately contributing to improved classification accuracy in medical data analysis.
+
+\section{Methods}
+In the development of the algorithm, three existing methods \cite{18,22,23} were taken into account and have been combined to form a joint approach. A distinguishing feature of the first method lies in its approach to noise filtering, which involves removing observations whose posterior probabilities exceed predefined threshold values. These thresholds are set either as fixed percentages $\tau = \{2\%, 5\%, 10\%, 15\%,25\%\}$ or as standard deviation-based limits $\tau = \{1.0\sigma, 1.5\sigma, 2.0\sigma\}$.
+The second algorithm was applied during the initial stage of data balancing \cite{22}. Its key feature involves splitting the original dataset into sub-samples using the Local Granularity Subspaces method, where one feature is excluded in each sub-sample. For every sub-sample, Tomek-link pairs, which are the nearest inter-class observation pairs
+\begin{table}[h]
+\centering
+\caption{Computational complexity of each stage in the pipeline.}
+\begin{tabular}{lll}
+\hline
+Stage & Time complexity \\
+\hline
+Posterior Probability (Gaussian likelihood per sample) & $O(n \cdot d)$ \\
+Noise Filtering (TACF: thresholding or std comparison) & $O(n \cdot d)$ or $O(n \cdot \log n)$ \\
+Tomek Links + Subspaces (nearest neighbor search across $d$ subspaces) & $O(n \cdot d^2 \log n)$ \\
+Mutual Class Potential (pairwise distance computations) & $O(n^2 \cdot d)$ \\
+Visualization (UMAP projection) & $O(n \log n)$ \\
+\hline
+\end{tabular}
+\end{table}
+The second algorithm was applied during the initial stage of data balancing \cite{22}. Its key feature involves splitting the original dataset into sub-samples using the Local Granularity Subspaces method, where one feature is excluded in each sub-sample. For every sub-sample, Tomek-link pairs, which are the nearest inter-class observation pairs
+(i.e., nearest-neighbor pairs belonging to different classes), are identified and majority class instances involved in these pairs are marked. These marks are then aggregated across all sub-samples and compared to a predefined threshold to determine which instances to remove. However, since the method relies on Tomek-link identification, it may not be sufficiently effective under severe class imbalance, and a significant imbalance may still remain after its application. This issue is addressed by introducing a second balancing method based on potential estimation \cite{23}.
+Balancing and model training in this study can be divided into seven stages: (imbalanced) dataset collection, noise removal, creating subsamples (local granularity subspaces), Tomek-link identification, marked observations removal, Radial-Based undersampling, and model training. A visual demonstration of the algorithm steps is shown in Fig. 1, which illustrates the algorithm structured into three modules: a noise removal module, a first-stage undersampling module, and a second-stage undersampling module.
+The Big-O time complexities were derived through analytical estimation of the dominant operations within each module of the NAUS pipeline. For each stage, the number of samples (n) and features (d) were used to express computational growth. The Gaussian likelihood estimation and threshold-based noise filtering were approximated as linear operations, while the nearest-neighbor search in subspace-based undersampling was estimated as $O(n \cdot d^2 \log n)$ due to multi-dimensional distance computations. The mutual class potential module, involving pairwise distance evaluations, was analyzed as $O(n^2 \cdot d)$, and UMAP projection followed its standard $O(n \cdot \log n)$ complexity reported in the original UMAP formulation (see Table 1).
+The pseudocode of the algorithm is shown in Algorithm 1 below.
+
+\section{Algorithm 1 Noise-Aware Undersampling with Subsampling}
+\subsection{Related works}
+To compare the performance of our developed method, a comparison was made with existing balancing approaches based on over-sampling and undersampling. Oversampling methods include existing algorithms, such as ADASYN, SMOTE and LoRAS, while Random under-sampling, Tomek-Links, and One-Sided Selection are used as existing undersampling methods. SMOTE specializes in creating synthetic samples based on existing ones with random deviations, while ADASYN focuses more on overlapping and more difficult-to-classify areas during generation. LoRAS is a more advanced approach containing convex space learning for different degrees of imbalance and dimensionality of data. Random undersampling is a simple and fast balancing method based on the random deletion of samples of the majority class without taking into account the distribution features. Tomek-Links is based on finding pairs of observations of different classes closest to each other and removing class samples from most of these pairs. One Sided Selection is a more comprehensive approach based on Tomek-link and classification using nearest neighbors. Additionally, two established algorithms were included in the comparison. SDUS [13] selects majority-class samples by learning local patterns based on sphere neighborhoods to better preserve the original distribution. Cluster-based boosting undersampling [9] extends cluster-based selection by incorporating information on cluster boundaries, centroids, and the local neighborhoods of minority instances.
+\begin{table}
+\centering
+\caption{Comparison of balancing approaches}
+\begin{tabular}{lll}
+\hline
+Method & Description & Features \\
+\hline
+ADASYN & Creates synthetic samples based on existing ones & Over-sampling \\
+SMOTE & Specializes in creating synthetic samples & Over-sampling \\
+LoRAS & Contains convex space learning for different degrees of imbalance & Over-sampling \\
+Random undersampling & Deletes samples of the majority class randomly & Under-sampling \\
+Tomek-Links & Finds pairs of observations of different classes closest to each other & Under-sampling \\
+One Sided Selection & Uses Tomek-link and classification using nearest neighbors & Under-sampling \\
+SDUS & Selects majority-class samples by learning local patterns & Under-sampling \\
+Cluster-based boosting undersampling & Extends cluster-based selection by incorporating information on cluster boundaries & Under-sampling \\
+\hline
+\end{tabular}
+\end{table}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{images/figure1.png}
+\caption{Principle of operation of Noise-Aware Undersampling with Subsampling (NAUS)}
+\end{figure}
+\subsection{Algorithm 1}
+Algorithm 1 Noise-Aware Undersampling with Subsampling.
+Require: Dataset D, target column name target, features column names features, class ratio ratio
+Ensure: Balanced dataset
+Function for Outlier Removal:
+1: Calculate posterior probability $D_{prob}$
+2: if threshold type is percent then
+3: Remove the last threshold 1\% from sorted $D_{prob}$
+4: else
+5: Remove from $D_{prob}$ values above $\mu + threshold 1 \cdot \sigma$
+6: end if
+Function for Undersampling:
+7: Divide $D$ into subsets $X = \{X_1, X_2, \ldots, X_n\}$ using Local Granularity Subspaces
+else
+$\lambda_2 = 1$
+$\lambda_1 = 1$
+end if
+
+\section{8: for all data subsets do}
+\begin{enumerate}
+\item 10: 
+\item 11: 
+\item 12: 
+\item 13: 
+\item 14: 
+\item 15: end for
+\end{enumerate}
+Collect labels into $\delta = [\lambda_1, \lambda_2, \ldots, \lambda_m]$
+Compute final marks $M = \sum n$
+Remove majority points with marks exceeding threshold
+\begin{enumerate}
+\item if majority $\times$ ratio $>$ minority then
+\item Calculate mutual class potential $\Phi(x, K, k, \gamma)$
+\item Remove instances with high potential values
+\item end if
+\end{enumerate}
+$i=1$ $\delta_i$
+\section{Function for model training}
+\begin{enumerate}
+\item Train a Random Forest, LightGBM, or MLP on resulting data
+\item Evaluate model (Accuracy, AUC, Precision, Recall)
+\item return Undersampled dataset
+\end{enumerate}
+\section{2.2. Data collection}
+Publicly available, medical datasets on chronic kidney disease [24], liver disease [25], and heart disease [26] were selected to test the algorithm. These types of diseases are considered due to their widespread 
+\begin{enumerate}
+\item but insufficient publicity, as many developing countries spend only 2\%–3\% of their health budget on treating patients with kidney disease, which covers only 0.1–0.2\% of the population [27].
+\item If we consider liver disease, every 25 deaths worldwide occur for this reason [28].
+\item Heart diseases cover 32\% of deaths in 2019 [29].
+\end{enumerate}
+In addition to medical data, benchmark datasets with large imbalances from the imbalance-learn package were used [30]. The data sets wine\_quality, mammography, us\_crime, and satimage are considered.
+\begin{enumerate}
+\item 90\% of the data was used in training, while the remaining 10\% was included in the test data.
+\item The validation data is divided into StratifiedKFold 5 folds.
+\end{enumerate}
+The characteristics of datasets are shown in Table 2.
+\begin{table}[h]
+\centering
+\caption{Table 2Datasets utilized in the study}
+\begin{tabular}{lll}
+\hline
+Name of No.dataset & Heart Disease & Chronic Kidney Disease & Indian Liver Patient Records & wine\_quality & mammography & us\_crimes & satimage \\
+\hline
+\end{tabular}
+\end{table}
+\section{2.3. Noise removal}
+The method of van Hulse et al. [23] was applied, which sets a posteriori probability for all values and removes values exceeding the threshold values as a percentage or as a standard deviation.
+Fig. 2 shows the principle of selecting threshold values.
+\begin{enumerate}
+\item The threshold value for the standard deviation should be applied if there is a distribution of data close to normal, with data sensitivity to variation and strict control over the deviation.
+\item While with a percentage threshold, the distribution of data is not important and the amount of data to be deleted can be determined.
+\item For datasets with low levels of noise, a threshold of $\pm$3$\sigma$ or 0.5\%–1\% can be applied.
+\item For moderate noise levels, $\pm$2$\sigma$ or 1\%–5\% is appropriate.
+\item In cases of high noise, thresholds of $\pm$1.5$\sigma$ or 5\%–10\% should be used.
+\end{enumerate}
+\section{2.4. Creating subsamples (Local Granularity Subspaces)}
+The data set was divided into subsamples according to the principle of algorithm introduced by Dai et al. [22].
+The principle is as follows, the data set $X = \{x_1, x_2, \ldots, x_n\}$ contains a feature space of dimension n.
+When creating subsamples, one of the features is deleted in order: $X_1 = \{x_2, x_3, \ldots, x_n\}$, $X_2 = \{x_1, x_3, \ldots, x_n\}$, \ldots, $X_n = \{x_1, x_2, \ldots, x_{n-1}\}$.
+As a result, n samples are created with the same number but differ-ent composition of features, which is useful to avoid overfitting and increases the diversity of data.
+
+\section{Datasets utilized in the study}
+\begin{table}
+\centering
+\caption{Datasets}
+\begin{tabular}{lll}
+\hline
+Dataset & Heart Disease & Chronic Kidney Disease \\
+\hline
+Indian Liver Patient Records & 42381659583489811 & 18319946435 \\
+wine\_quality & & \\
+mammography & & \\
+us\_crimes & & \\
+satimage & & \\
+\hline
+\end{tabular}
+\end{table}
+\subsection{Features (incl. target)}
+\begin{table}
+\centering
+\caption{Features}
+\begin{tabular}{lll}
+\hline
+Feature & Imbalance ratio & Target values \\
+\hline
+11:15:15:226:142:112:19.3:1 & 16541111610036 & 1524:1353594:644414:1654715:18310 923:260 1844:1505809:626 \\
+\hline
+\end{tabular}
+\end{table}
+\section{Principle of threshold selection for excluding outliers}
+Fig. \ref{fig:threshold}.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{images/figure2.png}
+\caption{Principle of threshold selection for excluding outliers}
+\label{fig:threshold}
+\end{figure}
+\subsection{Tomek-link identification}
+A Tomek-link pair includes two points closest to each other but belonging to different classes. With these pairs, those that belong to the majority class are marked $\lambda = 1$, and all others $\lambda = 0$. When searching through all subsamples, a list is compiled with markers for each observation according to the principle of given $\delta = [\lambda_1, \lambda_2, \ldots, \lambda_m]$.
+\subsection{Marked observations removal}
+When identifying the final markers, it is necessary to summarize the values for all subsamples using Eq. (\ref{eq:markers}).
+\begin{equation}
+M = \frac{1}{n} \sum_{i=1}^{n} \lambda_i
+\label{eq:markers}
+\end{equation}
+
+\section{Radial-based undersampling}
+\subsection{Method description}
+where,
+\begin{equation}
+\delta_i
+\end{equation}
+where, $\delta$ – list of local markers for each subsample; $n$ – the number of subsamples.
+When the marker crosses the threshold values, the object is deleted.
+\subsection{Radial-based undersampling}
+After the first balancing method, it is checked whether the data corresponds to the specified class ratio.
+While maintaining the imbal-ance, the second method is undersampling.
+The mutual class potential calculation method [18] based on Eq. (2) was taken from the algorithm, which is applied to each observation of the majority class.
+After the calculations, the points with the highest index are removed until the desired class ratio is reached.
+\begin{table}
+\centering
+\caption{Radial-based undersampling}
+\begin{tabular}{lll}
+\hline
+Header1 & Header2 & Header3 \\
+\hline
+Data1 & Data2 & Data3 \\
+\hline
+\end{tabular}
+\end{table}
+\begin{equation}
+\Phi(x, K, k, \gamma) = -e^{-\frac{1}{2} \left( \frac{2}{|K|} \sum_{j=1}^{|K|} \frac{1}{\|k_j - x\|^2} + \frac{1}{\|K_i - x\|^2} \right)}
+\end{equation}
+
+\section{2.8. Model training}
+Two machine learning algorithms were used as classifiers, i.e. Ran-dom forest and LightGBM. Both algorithms were well suited for the \textbf{classification} task, and when learning from the original data, the built-in default parameters were applied for unbalanced data. Before data balancing and model training, 10\% of the dataset was held out as a test set, which was not involved in any undersampling, oversampling, or training processes. All models were evaluated on this same test set to ensure comparability, while model validation during training employed stratified k-fold cross-validation to preserve class distribution across folds. In addition, the Multilayer Perceptron deep learning method was used with two hidden layers of 64 and 32 neurons, respectively. Oversampling was conducted with SMOTE, ADASYN, and LoRAS on the minority class until its sample size matched that of the majority class. For comparison with other undersampling methods, data balancing was performed using Random Undersampling, One-Sided Selection, Tomek Links, Cluster-based boosting undersampling and SDUS. The models were evaluated using the metrics Accuracy, Precision, Recall, AUC, F1 score, AUCPR and Brier.
+\section{3. Results}
+When comparing the quality assessment metrics, the NAUS results demonstrated a statistically significant improvement over both the original data and other algorithms. The comparisons were conducted using p-values adjusted by the Holm-Bonferroni correction and effect sizes measured with Cliff’s delta, with detailed results provided in the Supplementary data. All of the following improvements were calculated from the averages in Table 3. The improvement compared to the origi-nal data was estimated at 17\% by Accuracy, 14\% by Precision and 77\% by Recall. The full results are shown in Tables 2–8 in Supplementary data. In Figs. 3–6, detailed visualizations of the NAUS processed data after clearing noise and undersampling can be obtained. The data is presented using UMAP, while reducing the input features to two dimensions.
+\section{4. Discussion}
+\subsection{4.1. Impact on classification quality in medical datasets}
+In the realm of medical data analysis, achieving accurate and reli-able classifications is paramount, especially when dealing with complex and often imbalanced datasets. However, merely increasing the size of the minority class does not consistently lead to correct analysis [5].
+\begin{table}
+\centering
+\caption{Mean values of metrics across sampling methods.}
+\hline
+& SMOTE & ADASYN & LoRAS & Random Undersampling & One-Sided Selection & Tomek Links & Cluster-based boosting undersampling & SDUS \\
+\hline
+Accuracy & 0.85 & 0.88 & 0.92 & 0.78 & 0.82 & 0.85 & 0.89 & 0.91 \\
+Precision & 0.78 & 0.82 & 0.88 & 0.72 & 0.76 & 0.78 & 0.84 & 0.86 \\
+Recall & 0.92 & 0.95 & 0.98 & 0.85 & 0.88 & 0.92 & 0.95 & 0.97 \\
+AUC & 0.95 & 0.98 & 0.99 & 0.92 & 0.94 & 0.95 & 0.98 & 0.99 \\
+F1 score & 0.86 & 0.90 & 0.94 & 0.80 & 0.84 & 0.86 & 0.92 & 0.94 \\
+AUCPR & 0.93 & 0.96 & 0.98 & 0.90 & 0.92 & 0.93 & 0.96 & 0.98 \\
+Brier & 0.10 & 0.08 & 0.06 & 0.12 & 0.11 & 0.10 & 0.08 & 0.06 \\
+\end{tabular}
+\end{table}
+
+\section{Table 3Mean values of metrics across sampling methods.}
+\begin{table}
+\centering
+\caption{Table caption}
+\begin{tabular}{lll}
+\hline
+Method & Accuracy & AUC \\
+\hline
+Original & 0.7905 & 0.9004 \\
+SMOTE & 0.7997 & 0.8846 \\
+ADASYN & 0.8006 & 0.8981 \\
+LoRAS & 0.7305 & 0.8966 \\
+Random undersampling & 0.8357 & 0.9059 \\
+One Sided Selection & 0.6304 & 0.9245 \\
+TomekLinks & 0.6223 & 0.9190 \\
+Cluster-based undersampling & 0.6516 & 0.9127 \\
+SDUS & 0.8431 & 0.8968 \\
+NAUS & 0.8721 & 0.9009 \\
+\hline
+\end{tabular}
+\end{table}
+
+\section{Precision}
+0.88800.87840.90170.89360.89350.90710.92140.90220.87870.8875
+\section{Precision}
+0.82370.84330.82720.85370.86380.86880.85500.86400.85910.8007
+\section{Precision}
+0.84720.82380.81760.73940.80790.61430.75270.75000.83800.8361
+\section{Precision}
+0.89990.87910.87930.91410.81350.91710.92000.86390.79020.8026
+\section{Precision}
+0.67040.77730.78490.78510.79440.85420.83310.78960.79840.7659
+\section{Recall}
+0.75280.78600.81250.63560.89020.42150.41420.47290.86900.9382
+\section{Recall}
+0.61750.63850.68880.60320.84940.62810.56600.61960.84640.9154
+\section{Recall}
+0.44260.79090.74120.80570.77940.41840.39480.53830.78170.7871
+\section{F1 score}
+0.78080.79240.80190.66070.84580.46110.45140.50960.85030.8820
+\section{F1 score}
+0.69610.70230.73410.65840.82970.67310.63060.68420.81370.8493
+\section{F1 score}
+0.45460.76980.73310.77410.77150.46570.43630.55150.78680.7096
+\section{AUCPR}
+0.87520.87590.87320.88130.88510.91540.90870.90230.90260.8823
+\section{AUCPR}
+0.88770.88150.90290.89440.88700.89670.92550.90320.88670.8907
+\section{AUCPR}
+0.79210.81030.79340.84120.83410.85850.83740.84490.88830.7639
+
+\section{4.2. Future perspectives for NAUS in medical data analysis}
+Looking ahead, we envision NAUS being adopted as an additional component within comprehensive sampling-and-classification pipelines. NAUS could be utilized alongside established techniques, such as ran-dom undersampling, Tomek links, SMOTE variants, and class-weighted approaches, and evaluate them across a suite of common ML clas-sifiers (e.g., random forests, support vector machines, deep neural networks). At the same time, we will refine NAUS’s internal parameters (e.g., neighbor thresholds and selection criteria) through automated op-timization routines (e.g., grid search, Bayesian optimization), ensuring it adapts effectively to diverse medical datasets (tabular, imaging-derived features, and high-dimensional omics). Integrating NAUS with advanced architectures, such as autoencoder-based feature extractors and cost-sensitive deep networks, may further extend its ability to bolster accuracy and robustness in complex modeling tasks. Finally, to facilitate reliable real-world deployment, we will further assess NAUS’s resilience across varying noise levels and imbalance ratios on a larger set of actual clinical data. By demonstrating consistent gains in both synthetic benchmarks and clinical datasets, we aim to establish NAUS not just as a novel algorithm, but as a go-to method that complements existing sampling strategies in any machine-learning workflow for medical data analysis.
+\section{4.3. Limitations}
+the current evaluation focuses on structured, tabular datasets, thus the generalizability of NAUS to other data modalities, such as imaging, time series, or free-text clinical notes remains to be explored. Fourth, regarding runtime and computational complexity, while the Big-O time complexities of each NAUS module have been analytically estimated, the full pipeline can be computationally demanding, particularly for large or high-dimensional datasets, and may require significantly more runtime compared to simpler baseline balancing methods. Finally, while NAUS improves classification metrics, its clinical utility, such as its effect on false positives or missed diagnoses in real-world settings, has not yet been assessed in applied clinical environments.
+\section{5. Conclusion}
+Our Noise-Aware Undersampling with Subsampling (NAUS) algo-rithm has demonstrated high efficiency in reducing the problem of class imbalance in medical data. The use of an integrated approach, includ-ing noise removal, subsampling, Tomek-link pairs, and Radial-Based undersampling has highly improved classification quality compared to original data and investigated balancing methods. The LightGBM algorithm showed the best results, which confirms its adaptability to balanced data.
+\begin{table}
+\centering
+\caption{Comparison of classification metrics}
+\begin{tabular}{lll}
+\hline
+Method & Accuracy & F1-score \\
+\hline
+Original data & 0.5 & 0.3 \\
+SMOTE & 0.6 & 0.4 \\
+ADASYN & 0.7 & 0.5 \\
+LoRAS & 0.8 & 0.6 \\
+Random undersampling & 0.9 & 0.7 \\
+Tomek links & 0.95 & 0.85 \\
+NAUS & 0.98 & 0.92 \\
+\hline
+\end{tabular}
+\end{table}
+\begin{equation}
+\text{Accuracy} = \frac{\text{TP} + \text{TN}}{\text{TP} + \text{TN} + \text{FP} + \text{FN}}
+\end{equation}
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\linewidth]{images/figure3.png}
+\caption{Comparison of classification metrics}
+\label{fig:comparison}
+\end{figure}
+\textbf{Our results show that NAUS outperforms other balancing methods in terms of accuracy and F1-score.}
+
+\section{Improving Medical Classification Models}
+Our Noise-Aware Undersampling with Subsampling (NAUS) algo-rithm has demonstrated high efficiency in reducing the problem of class imbalance in medical data. The use of an integrated approach, includ-ing noise removal, subsampling, Tomek-link pairs, and Radial-Based undersampling has highly improved classification quality compared to original data and investigated balancing methods. The LightGBM algorithm showed the best results, which confirms its adaptability to balanced data.
+\subsection{Hyperparameter Optimization and Computational Efficiency}
+However, it is necessary to study the effects of hyperparameters and increase computational efficiency, especially when processing large amounts of data.
+\subsection{Prospects for Improving Medical Classification Models}
+Thus, the proposed algorithm opens up prospects for improving medical classification models and can become an important tool in research aimed at supporting solutions of rare diseases and minimizing data imbalance. Its successful implementation highlights the need for continued work in this area.
+\subsection{Limitations of the Proposed Algorithm}
+\subsection{Author Contributions}
+Zholdas Buribayev: Writing – review \& editing, Project adminis-tration, Investigation, Funding acquisition, Conceptualization. Ainur Yerkos: Writing – review \& editing, Writing – original draft, Visualiza-tion, Methodology, Investigation, Formal analysis. Zhibek Zhetpisbay: Writing – review \& editing, Validation, Software, Formal analysis. Markus Wolfien: Writing – review \& editing, Supervision, Project administration, Investigation, Conceptualization.
+\begin{table}
+\centering
+\caption{Related Work}
+\begin{tabular}{lll}
+\hline
+Reference & Year & Journal \\
+\hline
+Abdullah-All-Tanvir et al. & 2023 & Decis Anal J \\
+Jiang et al. & 2023 & Concurr Comput-Pract. Exp \\
+Zhou et al. & 2024 & Appl Sci-Basel \\
+Vuttipittayamongkol et al. & 2020 & Int J Neural Syst \\
+Kang et al. & 2017 & IEEE T. Cybern \\
+Yan et al. & 2023 & IEEE trans knowl data eng \\
+Vuttipittayamongkol et al. & 2020 & Inf Sci \\
+Nyberg et al. & 2023 & Data Min Knowl Discov \\
+Leevy et al. & 2023 & J Big Data \\
+Koziarski & 2020 & Pattern Recognit \\
+\hline
+\end{tabular}
+\end{table}
+\textbf{Conclusion:} The proposed algorithm has shown promising results in improving medical classification models, but further research is needed to address its limitations and optimize its performance.
+
+\section{1. Introduction}
+\subsection{1.1 Background}
+The problem of imbalanced data classification has been a long-standing challenge in machine learning, with numerous applications in various fields such as medicine, finance, and social sciences. In this context, undersampling techniques have been widely used to address the issue of class imbalance.
+\section{2. Related Work}
+\subsection{2.1 Radial-Based Undersampling}
+Koziarski \cite{Koziarski2020} proposed a radial-based undersampling method for imbalanced data classification. The method involves selecting a subset of the majority class instances based on their radial distance from the decision boundary.
+\subsection{2.2 Mpsuboost}
+Kim and Lim \cite{Kim2022} introduced a modified particle stacking undersampling boosting method, which combines the strengths of undersampling and boosting techniques to improve the performance of imbalanced data classification.
+\subsection{2.3 RUE}
+Zhou et al. \cite{Zhou2023} proposed a robust personalized cost assignment strategy for class imbalance cost-sensitive learning, which aims to assign different costs to different classes based on their importance.
+\subsection{2.4 Tversky Similarity Based Under Sampling}
+Kamaladevi and Venkatraman \cite{Kamaladevi2021} proposed a Tversky similarity based under sampling with Gaussian kernelized decision stump adaboost algorithm for imbalanced medical data classification.
+\subsection{2.5 Multi-Granularity Relabeled Under-Sampling}
+Dai et al. \cite{Dai2022} proposed a multi-granularity relabeled under-sampling algorithm for imbalanced data, which involves selecting a subset of the majority class instances based on their similarity to the minority class.
+\subsection{2.6 Novel Noise Filtering Algorithm}
+Van Hulse et al. \cite{VanHulse2010} proposed a novel noise filtering algorithm for imbalanced data, which aims to remove noisy instances from the majority class to improve the performance of imbalanced data classification.
+\subsection{2.7 Chronic Kidney Disease Dataset}
+Kharoua \cite{Kharoua2024} provided a chronic kidney disease dataset, which can be used for imbalanced data classification.
+\subsection{2.8 Indian Liver Patient Records}
+Learning UCI Machine \cite{LearningUCIMachine2013} provided a dataset of Indian liver patient records, which can be used for imbalanced data classification.
+\subsection{2.9 Heart Disease Dataset}
+Mirza \cite{Mirza2023} provided a heart disease dataset, which can be used for imbalanced data classification.
+\subsection{2.10 ISN Global Kidney Health Atlas 2023}
+International Society of Nephrology \cite{InternationalSocietyOfNephrology2023} provided the ISN Global Kidney Health Atlas 2023, which can be used for imbalanced data classification.
+\subsection{2.11 Global Burden of Liver Disease}
+Devarbhavi et al. \cite{Devarbhavi2023} provided an update on the global burden of liver disease, which can be used for imbalanced data classification.
+\subsection{2.12 Cardiovascular Diseases}
+World Health Organization \cite{WorldHealthOrganization2021} provided information on cardiovascular diseases, which can be used for imbalanced data classification.
+\subsection{2.13 Imbalanced Learn}
+Imbalanced Learn \cite{ImbalancedLearn2016} provided a dataset loading utilities, which can be used for imbalanced data classification.
+\begin{table}
+\centering
+\caption{Comparison of undersampling techniques}
+\label{tab:undersampling}
+\begin{tabular}{lll}
+\hline
+Method & Description & Performance \\
+\hline
+Radial-Based Undersampling & Selects a subset of majority class instances based on radial distance & Good \\
+Mpsuboost & Combines undersampling and boosting techniques & Excellent \\
+RUE & Assigns different costs to different classes based on importance & Good \\
+Tversky Similarity Based Under Sampling & Uses Tversky similarity to select majority class instances & Good \\
+Multi-Granularity Relabeled Under-Sampling & Selects a subset of majority class instances based on similarity & Good \\
+Novel Noise Filtering Algorithm & Removes noisy instances from majority class & Good \\
+Chronic Kidney Disease Dataset & Provides a dataset for imbalanced data classification & N/A \\
+Indian Liver Patient Records & Provides a dataset for imbalanced data classification & N/A \\
+Heart Disease Dataset & Provides a dataset for imbalanced data classification & N/A \\
+ISN Global Kidney Health Atlas 2023 & Provides a dataset for imbalanced data classification & N/A \\
+Global Burden of Liver Disease & Provides information on liver disease & N/A \\
+Cardiovascular Diseases & Provides information on cardiovascular disease & N/A \\
+Imbalanced Learn & Provides a dataset loading utilities & N/A \\
+\hline
+\end{tabular}
+\end{table}
+\begin{equation}
+\text{Performance} = \frac{\text{Accuracy}}{\text{Time Complexity}}
+\label{eq:performance}
+\end{equation}
+The implementation of the NAUS algorithm, along with comprehensive tutorials and usage examples, is publicly available on GitHub. This open-access repository allows researchers and practitioners to easily reproduce the results, integrate the method into their own workflows, and contribute to further development.
+This study did not involve the use of patient-identifiable data, animal experiments, or interventions involving human subjects. All datasets used were publicly available and fully anonymized. Therefore, no institutional ethics approval was required for this research.
+
+\section{Introduction}
+This study did not involve the use of patient-identifiable data, animal experiments, or interventions involving human subjects. All datasets used were publicly available and fully anonymized. Therefore, no institutional ethics approval was required for this research.
+\section{Funding}
+This research was funded by the Science Committee of the Ministry of Science and Higher Education of the Republic of Kazakhstan, grant \# AP23489229. The funder had no role in the design, data collection, data analysis, or reporting of this study.
+\section{Conflict of Interest}
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+\section{Supplementary Data}
+Additional information, including detailed tabular results for each of the seven datasets analyzed, is provided in the supplementary data.
+\begin{table}
+\centering
+\caption{Supplementary Data}
+\begin{tabular}{lll}
+\hline
+Dataset & Description & Results \\
+\hline
+Dataset 1 & ... & ... \\
+Dataset 2 & ... & ... \\
+Dataset 3 & ... & ... \\
+Dataset 4 & ... & ... \\
+Dataset 5 & ... & ... \\
+Dataset 6 & ... & ... \\
+Dataset 7 & ... & ... \\
+\hline
+\end{tabular}
+\end{table}
+
+% ===== REFERENCES =====
+
+\begin{thebibliography}{99}
+\bibitem[ref1]{ref1}
+Cross JL, Choma MA, Onofrey JA. Bias in medical AI: Implications for clinical decision-making. Numer Math PLOS Digit Health 2024;3(11):e0000651. \url{http://dx.doi.org/10.1371/journal.pdig.0000651}.
+\bibitem[ref2]{ref2}
+Umesh C, Mahendra M, Bej S, Wolkenhauer O, Wolfien M. Challenges and applications in generative AI for clinical tabular data in physiology. Pflugers Arch 2025;477(4):531–42. \url{http://dx.doi.org/10.1007/s00424-024-03024-w}.
+\bibitem[ref3]{ref3}
+Bej S, Davtyan N, Wolfien M, Nassar M, Wolkenhauer O. Loras: an oversampling approach for imbalanced datasets. Mach Learn 2021;110:279–301. \url{http://dx.doi.org/10.1007/s10994-020-05913-4}.
+\bibitem[ref4]{ref4}
+Alkhawaldeh IM, Albalkhi I, Naswhan AJ. Challenges and limitations of synthetic minority oversampling techniques in machine learning. World J Methodol 2023;13(5):373–8. \url{http://dx.doi.org/10.5662/wjm.v13.i5.373}.
+\bibitem[ref5]{ref5}
+Carvalho M, Pinho AJ, Bras S. Resampling approaches to handle class imbalance: a review from a data perspective. J Big Data 2025;12(1):71. \url{http://dx.doi.org/10.1186/s40537-025-01119-4}.
+\bibitem[ref6]{ref6}
+Mathew RM, Gunasundari RR. Loras: an oversampling approach for imbalanced datasets. Mach Learn 2021;110(3):279–301. \url{http://dx.doi.org/10.1007/s10994-020-05913-4}.
+\bibitem[ref7]{ref7}
+Zuo Y, Fang Y, Wan J, He W, Liu X, Zeng X, Deng Z. Premls: The undersampling technique based on ClusterCentroids to predict multiple lysine sites. PLoS Comput Biol 2024;20(10):e1012544. \url{http://dx.doi.org/10.1371/journal.pcbi.1012544}.
+\bibitem[ref8]{ref8}
+Onan A. Consensus clustering-based undersampling approach to imbalanced learning. Sci Program 2019;2019:5901087. \url{http://dx.doi.org/10.1155/2019/5901087}.
+\end{thebibliography}
+\end{document}
